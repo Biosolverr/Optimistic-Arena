@@ -11,7 +11,7 @@ class OptimisticArena(gl.Contract):
     # persisted storage
     # -------------------------
     next_session_id: u256
-    last_session_id: u256  # handy helper for UI/tests
+    last_session_id: u256  # удобный хелпер
 
     # session meta
     session_host: TreeMap[u256, Address]
@@ -21,11 +21,11 @@ class OptimisticArena(gl.Contract):
     session_phase: TreeMap[u256, u256]  # 0=LOBBY, 1=SUBMISSIONS, 2=VOTING
 
     # per-session config
-    session_challenge_period_sec: TreeMap[u256, u256]  # seconds (claim challenge window)
+    session_challenge_period_sec: TreeMap[u256, u256]  # seconds (окно для challenge claim'а)
     session_llm_prompts_enabled: TreeMap[u256, u256]   # 0/1
     session_llm_judge_enabled: TreeMap[u256, u256]     # 0/1
-    session_appeal_bond_xp: TreeMap[u256, u256]        # XP bond for AI-score appeals
-    session_appeal_period_sec: TreeMap[u256, u256]     # AI-score appeal window
+    session_appeal_bond_xp: TreeMap[u256, u256]        # XP-бонд за appeal AI-оценки
+    session_appeal_period_sec: TreeMap[u256, u256]     # окно апелляции AI-оценок
 
     # lock new rounds while a claim is pending
     session_active_claim_round: TreeMap[u256, u256]    # 0 or round_no
@@ -40,7 +40,7 @@ class OptimisticArena(gl.Contract):
     # submissions
     round_submission: TreeMap[str, str]                # "{sid}:{round}:{addr_hex}" -> text
     round_has_submitted: TreeMap[str, u256]            # 0/1
-    round_submission_valid: TreeMap[str, u256]         # 0/1 — passed AI moderation?
+    round_submission_valid: TreeMap[str, u256]         # 0/1 — прошла ли AI-модерацию
 
     # AI scores per submission
     round_score_clarity: TreeMap[str, u256]            # 0..10
@@ -52,12 +52,12 @@ class OptimisticArena(gl.Contract):
     round_votes_for: TreeMap[str, u256]                # "{sid}:{round}:{candidate_hex}" -> votes
 
     # scoring / appeals
-    round_scored: TreeMap[str, u256]                   # 0/1 — LLM already scored submissions
-    round_appeal_deadline: TreeMap[str, u256]          # unix seconds for AI-score appeals
-    submission_appealed: TreeMap[str, u256]            # "{sid}:{round}:{addr_hex}" -> 0/1 (one appeal per answer)
+    round_scored: TreeMap[str, u256]                   # 0/1 — LLM уже проставил оценки
+    round_appeal_deadline: TreeMap[str, u256]          # unix seconds для AI-score appeals
+    submission_appealed: TreeMap[str, u256]            # "{sid}:{round}:{addr_hex}" -> 0/1 (одна апелляция на ответ)
 
     # finalization status
-    # 0=NOT_FINAL, 1=FINALIZED (deterministic or via claim), 2=CLAIM_PENDING
+    # 0=NOT_FINAL, 1=FINALIZED (детермин. или через claim), 2=CLAIM_PENDING
     round_finalized: TreeMap[str, u256]
 
     # optimistic claim / dispute (per round "{sid}:{round}")
@@ -92,8 +92,7 @@ class OptimisticArena(gl.Contract):
     def _PHASE_VOTING(self) -> u256: return u256(2)
 
     def _now(self) -> u256:
-        # In GenVM, clock_time_get returns the tx unix timestamp.
-        # See: https://docs.genlayer.com/understand-genlayer-protocol/core-concepts/non-deterministic-operations-handling
+        # В GenVM clock_time_get отдаёт unix‑timestamp транзакции. ([docs.genlayer.com](https://docs.genlayer.com/understand-genlayer-protocol/core-concepts/non-deterministic-operations-handling))
         return u256(int(time.time()))
 
     def _sid(self, session_id: int) -> u256:
@@ -165,7 +164,7 @@ class OptimisticArena(gl.Contract):
     # -------------------------
     def _ai_generate_prompt(self, sid: u256, rnd: u256) -> str:
         """
-        Generate a round prompt (AI game designer).
+        Генерация промпта раунда (AI game designer).
         """
         member_count = int(self.session_member_count.get(sid, u256(0)))
         base_info = f"{member_count} players" if member_count > 0 else "no players yet"
@@ -212,7 +211,7 @@ class OptimisticArena(gl.Contract):
 
     def _ai_generate_submission(self, prompt: str) -> str:
         """
-        LLM assistant writes one short answer.
+        LLM-помощник пишет один короткий ответ.
         """
         task = (
             "You are a witty player in a GenLayer writing game.\n"
@@ -254,9 +253,9 @@ class OptimisticArena(gl.Contract):
 
     def _ai_moderate_and_score(self, prompt: str, answer: str) -> tuple[bool, int, int, int]:
         """
-        AI moderation + AI scoring:
-        - ok = True/False (should the answer be accepted),
-        - clarity / creativity / relevance in [0..10].
+        AI‑модерация + AI‑оценка:
+        - ok = True/False (пропустить ли ответ),
+        - clarity / creativity / relevance в [0..10].
         """
         task = (
             "You are an AI moderator and judge for a GenLayer party game.\n"
@@ -316,7 +315,7 @@ class OptimisticArena(gl.Contract):
 
     def _ai_rescore_submission(self, prompt: str, answer: str) -> tuple[int, int, int]:
         """
-        AI re-score on appeal (scores only, no re-moderation).
+        AI‑пересчёт оценок по апелляции (без повторной модерации).
         """
         task = (
             "You are an AI judge reconsidering a previous score for a GenLayer game answer.\n"
@@ -367,8 +366,8 @@ class OptimisticArena(gl.Contract):
         context_reason: str,
     ) -> tuple[Address, str]:
         """
-        LLM picks a winner from a restricted set (allowed_hexes),
-        considering texts, votes, and AI sub-scores.
+        LLM выбирает победителя среди ограниченного множества allowed_hexes
+        с учётом текстов, голосов и AI‑оценок.
         """
         rk = self._rk(sid, rnd)
         member_count = int(self.session_member_count.get(sid, u256(0)))
@@ -457,7 +456,7 @@ class OptimisticArena(gl.Contract):
 
         raise UserError("AI returned invalid winner")
 
-      # -------------------------
+    # -------------------------
     # public write: core game
     # -------------------------
     @gl.public.write
@@ -471,11 +470,10 @@ class OptimisticArena(gl.Contract):
         appeal_period_sec: int = 60,
     ) -> int:
         """
-        Create a session.
-
-        - challenge_period_sec: window for challenging a claimed winner (optimistic claim).
-        - appeal_period_sec: window for appealing AI scores after scoring.
-        - appeal_bond_xp: XP bond required per appeal.
+        Создать сессию.
+        challenge_period_sec — окно для challenge'а победителя (optimistic claim).
+        appeal_period_sec — окно для апелляций AI-оценок после скоринга.
+        appeal_bond_xp — XP-бонд за одну апелляцию.
         """
         if max_players < 2:
             raise UserError("max_players must be >= 2")
@@ -530,8 +528,8 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def start_round(self, session_id: int, prompt: str = "") -> int:
         """
-        Start a round from LOBBY.
-        If prompt is empty and LLM prompts are enabled, the prompt is generated via _ai_generate_prompt().
+        Старт раунда из LOBBY.
+        Если prompt пустой и LLM-промпт включён — генерируем его через _ai_generate_prompt.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -565,7 +563,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def submit(self, session_id: int, text: str) -> None:
         """
-        Member submits an answer during SUBMISSIONS.
+        Участник отправляет ответ в фазе SUBMISSIONS.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -591,7 +589,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def submit_with_llm(self, session_id: int) -> None:
         """
-        Submit with an LLM-generated answer.
+        Сабмит с автогенерацией ответа через LLM.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -619,10 +617,10 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def close_submissions(self, session_id: int) -> None:
         """
-        Host closes submissions:
-        - runs AI moderation + AI scoring for all submissions,
-        - opens the AI-score appeal window,
-        - switches phase to VOTING.
+        Host закрывает приём ответов:
+        - запускает AI-модерацию + AI-скоринг для всех сабмитов,
+        - открывает окно апелляций AI-оценок,
+        - переводит фазу в VOTING.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -643,7 +641,7 @@ class OptimisticArena(gl.Contract):
             if self.round_has_submitted.get(sk, u256(0)) != u256(1):
                 continue
 
-            # if scores already exist, do not recompute (defensive)
+            # если уже есть оценки, не пересчитываем (на всякий случай)
             if self.round_scored.get(rk, u256(0)) == u256(1) and self.round_score_clarity.get(sk) is not None:
                 continue
 
@@ -670,11 +668,11 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def vote(self, session_id: int, candidate: str) -> None:
         """
-        Voting rules:
-        - only during VOTING,
-        - no self-votes,
-        - voter and candidate must have submissions; candidate submission must be valid,
-        - one vote per address.
+        Голосование:
+        - только в VOTING,
+        - нельзя голосовать за себя,
+        - голосующий и кандидат должны иметь валидные сабмиты,
+        - один голос на адрес.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -719,12 +717,12 @@ class OptimisticArena(gl.Contract):
         tally_key = self._cand_key(sid, rnd, cand_hex)
         self.round_votes_for[tally_key] = self.round_votes_for.get(tally_key, u256(0)) + u256(1)
 
-      # -------------------------
+    # -------------------------
     # deterministic finalize (60% human / 40% AI)
     # -------------------------
     def _compute_winner_by_votes(self, sid: u256, rnd: u256) -> Address:
         """
-        Pure vote-tally winner (used for optimistic fallback).
+        Чисто по голосам — используется для optimistic fallback.
         """
         member_count = int(self.session_member_count.get(sid, u256(0)))
         best_votes = u256(0)
@@ -754,7 +752,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def finalize_round(self, session_id: int) -> str:
         """
-        Finalize a round deterministically:
+        Финализация раунда по формуле:
         final_score = 60% human_votes + 40% AI_scores (clarity+creativity+relevance).
         """
         sid = self._sid(session_id)
@@ -778,7 +776,7 @@ class OptimisticArena(gl.Contract):
         if self.round_scored.get(rk, u256(0)) != u256(1):
             raise UserError("Round not scored yet")
 
-        # wait for AI-score appeal window to end (if configured)
+        # ждём окончания окна апелляций AI-оценок (если оно задано)
         appeal_deadline = self.round_appeal_deadline.get(rk, u256(0))
         if appeal_deadline != u256(0) and self._now() <= appeal_deadline:
             raise UserError("Appeal window still open")
@@ -787,7 +785,7 @@ class OptimisticArena(gl.Contract):
         if member_count == 0:
             raise UserError("No members")
 
-        # collect candidates
+        # собираем кандидатов
         candidates: list[tuple[Address, int, int]] = []  # (addr, votes, ai_total)
         max_votes = 0
         max_ai = 0
@@ -821,7 +819,7 @@ class OptimisticArena(gl.Contract):
         best_addr: typing.Optional[Address] = None
 
         for addr, votes, ai_total in candidates:
-            # normalize to [0..1000]
+            # нормализация в [0..1000]
             votes_scaled = (votes * 1000) // (max_votes if max_votes > 0 else 1)
             ai_scaled = (ai_total * 1000) // (max_ai if max_ai > 0 else 1)
             total_score = votes_scaled * 60 + ai_scaled * 40  # 60/40
@@ -854,11 +852,11 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def appeal_ai_score(self, session_id: int, round_no: int) -> int:
         """
-        A player appeals the AI score of their OWN answer:
-        - pays an XP bond (if configured),
-        - LLM re-scores,
-        - if new total > old total: update scores and reward bond*2,
-        - else: bond is lost.
+        Игрок оспаривает AI-оценку СВОЕГО ответа:
+        - вносит XP-бонд,
+        - LLM пересчитывает оценки,
+        - если новая сумма > старой — оценки обновляются, бонд умножается и возвращается,
+        - иначе бонд сгорает.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -906,14 +904,14 @@ class OptimisticArena(gl.Contract):
         new_total = new_c + new_cr + new_r
 
         if new_total > old_total:
-            # successful appeal: update scores and reward
+            # AI явно поднял оценку — считаем, что апелляция успешна
             self.round_score_clarity[sk] = u256(new_c)
             self.round_score_creativity[sk] = u256(new_cr)
             self.round_score_relevance[sk] = u256(new_r)
             if bond > u256(0):
                 reward = bond * u256(2)
                 self.season_xp[challenger] = self.season_xp.get(challenger, u256(0)) + reward
-        # else: keep old scores; bond was already deducted
+        # иначе: оставляем старые оценки, bond уже сгорел
 
         self.submission_appealed[sk] = u256(1)
         return new_total
@@ -933,13 +931,13 @@ class OptimisticArena(gl.Contract):
         self.round_challenge_count[rk] = u256(0)
 
         self.round_finalized[rk] = u256(2)          # CLAIM_PENDING
-        self.session_active_claim_round[sid] = rnd  # lock starting new rounds
+        self.session_active_claim_round[sid] = rnd  # блокируем новый раунд
         self.session_phase[sid] = self._PHASE_LOBBY()
 
     @gl.public.write
     def optimistic_claim_winner(self, session_id: int, candidate: str, reason: str = "") -> str:
         """
-        Host makes an optimistic claim for a specific winner address.
+        Host делает optimistic claim явного победителя (адрес).
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -966,7 +964,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def optimistic_claim_by_votes(self, session_id: int) -> str:
         """
-        Host makes an optimistic claim based on the on-chain vote tally.
+        Host делает claim победителя по on-chain голосам.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -985,8 +983,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def optimistic_claim_by_llm(self, session_id: int) -> str:
         """
-        Host makes an optimistic claim where the winner is selected by the LLM judge
-        among all valid submitters.
+        Host делает claim победителя, выбранного LLM среди всех валидных сабмиттеров.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -1030,7 +1027,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def challenge_claim(self, session_id: int, alternative_winner: str, reason: str) -> int:
         """
-        Any member can challenge an active claim (alternative winner + reason).
+        Любой участник может оспорить активный claim (альтернативный победитель + причина).
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -1077,10 +1074,10 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def finalize_claim(self, session_id: int) -> str:
         """
-        Finalize an optimistic claim:
-        - if there are no challenges: accept the claim,
-        - if challenged: after the deadline, pick a winner among claimed + alternatives
-          using LLM judge (or vote tally fallback if LLM judge is disabled).
+        Финализация optimistic-claim:
+        - если нет челленджей → принимаем claim,
+        - если есть → после дедлайна LLM выбирает победителя среди claimed+alts
+          (или fallback по голосам, если LLM-судья отключён).
         """
         sid = self._sid(session_id)
         self._require_session(sid)
@@ -1104,7 +1101,7 @@ class OptimisticArena(gl.Contract):
         if challenge_count > 0 and self._now() <= deadline:
             raise UserError("Wait until challenge window ends")
 
-        # ideally, the AI-score appeal window is also closed
+        # желательно, чтобы окно апелляций AI-оценок тоже уже закрылось
         appeal_deadline = self.round_appeal_deadline.get(rk, u256(0))
         if appeal_deadline != u256(0) and self._now() <= appeal_deadline:
             raise UserError("AI-score appeal window still open")
@@ -1144,13 +1141,13 @@ class OptimisticArena(gl.Contract):
 
         return winner.as_hex
 
-      # -------------------------
+    # -------------------------
     # XP helpers
     # -------------------------
     @gl.public.write
     def reward_player(self, session_id: int, round_no: int, player: str, amount: int) -> None:
         """
-        Host manually adds XP to a player for a specific round (only if they submitted).
+        Host вручную добавляет XP игроку за конкретный раунд, если у него был сабмит.
         """
         if amount <= 0:
             raise UserError("amount must be > 0")
@@ -1172,7 +1169,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.write
     def add_xp(self, player: str, amount: int) -> None:
         """
-        Utility: direct XP credit (e.g., by an external system).
+        Utility: прямое начисление XP (например, внешней системой).
         """
         if amount <= 0:
             raise UserError("amount must be > 0")
@@ -1244,7 +1241,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.view
     def list_round_submissions(self, session_id: int, round_no: int) -> list[dict[str, typing.Any]]:
         """
-        List all submissions (for UI/leaderboard):
+        Список всех сабмитов (для UI/leaderboard):
         author, text, valid, votes, clarity/creativity/relevance.
         """
         sid = self._sid(session_id)
@@ -1285,7 +1282,7 @@ class OptimisticArena(gl.Contract):
     @gl.public.view
     def get_round_info(self, session_id: int, round_no: int) -> dict[str, typing.Any]:
         """
-        Extended round status: prompt, finalization, claim, LLM explanation.
+        Расширенный статус раунда: промпт, финализация, claim, LLM-объяснение.
         """
         sid = self._sid(session_id)
         self._require_session(sid)
